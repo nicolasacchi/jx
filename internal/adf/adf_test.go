@@ -253,6 +253,208 @@ func TestMarkdownValidJSON(t *testing.T) {
 	}
 }
 
+// --- ToMarkdown tests ---
+
+func TestToMarkdownHeading(t *testing.T) {
+	doc := New().Heading(2, "My Title").Build()
+	got := ToMarkdown(doc)
+	if got != "## My Title" {
+		t.Errorf("got %q, want %q", got, "## My Title")
+	}
+}
+
+func TestToMarkdownParagraph(t *testing.T) {
+	doc := New().Paragraph("Hello world").Build()
+	got := ToMarkdown(doc)
+	if got != "Hello world" {
+		t.Errorf("got %q, want %q", got, "Hello world")
+	}
+}
+
+func TestToMarkdownCodeBlock(t *testing.T) {
+	doc := New().CodeBlock("ruby", "def show\n  @product\nend").Build()
+	got := ToMarkdown(doc)
+	expected := "```ruby\ndef show\n  @product\nend\n```"
+	if got != expected {
+		t.Errorf("got:\n%s\nwant:\n%s", got, expected)
+	}
+}
+
+func TestToMarkdownBulletList(t *testing.T) {
+	doc := New().BulletList("First", "Second", "Third").Build()
+	got := ToMarkdown(doc)
+	expected := "- First\n- Second\n- Third"
+	if got != expected {
+		t.Errorf("got:\n%s\nwant:\n%s", got, expected)
+	}
+}
+
+func TestToMarkdownOrderedList(t *testing.T) {
+	doc := New().OrderedList("First", "Second").Build()
+	got := ToMarkdown(doc)
+	expected := "1. First\n2. Second"
+	if got != expected {
+		t.Errorf("got:\n%s\nwant:\n%s", got, expected)
+	}
+}
+
+func TestToMarkdownRule(t *testing.T) {
+	doc := New().Paragraph("Above").Rule().Paragraph("Below").Build()
+	got := ToMarkdown(doc)
+	expected := "Above\n\n---\n\nBelow"
+	if got != expected {
+		t.Errorf("got:\n%s\nwant:\n%s", got, expected)
+	}
+}
+
+func TestToMarkdownBlockquote(t *testing.T) {
+	doc := New().Blockquote("A quote").Build()
+	got := ToMarkdown(doc)
+	expected := "> A quote"
+	if got != expected {
+		t.Errorf("got %q, want %q", got, expected)
+	}
+}
+
+func TestToMarkdownInlineMarks(t *testing.T) {
+	doc := New().Build()
+	doc.Content = []Node{
+		{
+			"type": "paragraph",
+			"content": []Node{
+				Text("Hello "),
+				Bold("world"),
+				Text(" and "),
+				Italic("italic"),
+				Text(" and "),
+				Code("code"),
+			},
+		},
+	}
+	got := ToMarkdown(doc)
+	expected := "Hello **world** and *italic* and `code`"
+	if got != expected {
+		t.Errorf("got %q, want %q", got, expected)
+	}
+}
+
+func TestToMarkdownLink(t *testing.T) {
+	doc := New().Build()
+	doc.Content = []Node{
+		{
+			"type": "paragraph",
+			"content": []Node{
+				Text("See "),
+				Link("PR #6966", "https://github.com/pull/6966"),
+			},
+		},
+	}
+	got := ToMarkdown(doc)
+	expected := "See [PR #6966](https://github.com/pull/6966)"
+	if got != expected {
+		t.Errorf("got %q, want %q", got, expected)
+	}
+}
+
+func TestToMarkdownMixed(t *testing.T) {
+	doc := New().
+		Heading(2, "Context").
+		Paragraph("Phase 1a is deployed.").
+		Heading(2, "Task").
+		BulletList("Modify controller", "Set s-maxage=0").
+		Heading(2, "Code").
+		CodeBlock("bash", "curl -I https://example.com").
+		Build()
+	got := ToMarkdown(doc)
+	expected := `## Context
+
+Phase 1a is deployed.
+
+## Task
+
+- Modify controller
+- Set s-maxage=0
+
+## Code
+
+` + "```bash\ncurl -I https://example.com\n```"
+	if got != expected {
+		t.Errorf("got:\n%s\n\nwant:\n%s", got, expected)
+	}
+}
+
+func TestToMarkdownFromJSON(t *testing.T) {
+	adfJSON := `{"version":1,"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Hello from ADF"}]}]}`
+	got := ToMarkdownFromJSON(json.RawMessage(adfJSON))
+	if got != "Hello from ADF" {
+		t.Errorf("got %q, want %q", got, "Hello from ADF")
+	}
+}
+
+func TestToMarkdownFromJSONPlainString(t *testing.T) {
+	got := ToMarkdownFromJSON(json.RawMessage(`"just a string"`))
+	if got != "just a string" {
+		t.Errorf("got %q, want %q", got, "just a string")
+	}
+}
+
+func TestToMarkdownFromJSONNil(t *testing.T) {
+	got := ToMarkdownFromJSON(nil)
+	if got != "" {
+		t.Errorf("got %q, want empty", got)
+	}
+}
+
+func TestToMarkdownNilDoc(t *testing.T) {
+	got := ToMarkdown(nil)
+	if got != "" {
+		t.Errorf("got %q, want empty", got)
+	}
+}
+
+func TestToMarkdownRoundTrip(t *testing.T) {
+	// Build an ADF doc via FromMarkdown, convert back, verify similarity
+	original := "## Context\n\nProduct page caching is deployed.\n\n- Modify controller\n- Set headers\n\n```bash\ncurl -I https://example.com\n```"
+	doc := FromMarkdown(original)
+	got := ToMarkdown(doc)
+	if got != original {
+		t.Errorf("round-trip mismatch:\ngot:\n%s\n\nwant:\n%s", got, original)
+	}
+}
+
+func TestToMarkdownTable(t *testing.T) {
+	doc := &Document{
+		Version: 1,
+		Type:    "doc",
+		Content: []Node{
+			{
+				"type": "table",
+				"content": []Node{
+					{
+						"type": "tableRow",
+						"content": []Node{
+							{"type": "tableHeader", "content": []Node{{"type": "paragraph", "content": []Node{Text("Name")}}}},
+							{"type": "tableHeader", "content": []Node{{"type": "paragraph", "content": []Node{Text("Value")}}}},
+						},
+					},
+					{
+						"type": "tableRow",
+						"content": []Node{
+							{"type": "tableCell", "content": []Node{{"type": "paragraph", "content": []Node{Text("CPU")}}}},
+							{"type": "tableCell", "content": []Node{{"type": "paragraph", "content": []Node{Text("80%")}}}},
+						},
+					},
+				},
+			},
+		},
+	}
+	got := ToMarkdown(doc)
+	expected := "| Name | Value |\n| --- | --- |\n| CPU | 80% |"
+	if got != expected {
+		t.Errorf("got:\n%s\n\nwant:\n%s", got, expected)
+	}
+}
+
 func nodeTypes(nodes []Node) []string {
 	types := make([]string, len(nodes))
 	for i, n := range nodes {

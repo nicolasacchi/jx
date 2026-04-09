@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/nicolasacchi/jx/internal/adf"
 )
 
 // defaultSearchFields is the set of fields requested on search/list operations.
@@ -119,7 +121,11 @@ func flattenIssue(raw json.RawMessage) map[string]any {
 		flat["duedate"] = issue.Fields.DueDate
 	}
 	if issue.Fields.Description != nil {
-		flat["description"] = issue.Fields.Description
+		if descriptionFormat == "markdown" {
+			flat["description"] = adf.ToMarkdownFromJSON(issue.Fields.Description)
+		} else {
+			flat["description"] = issue.Fields.Description
+		}
 	}
 
 	// Fix versions

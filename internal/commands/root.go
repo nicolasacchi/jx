@@ -11,16 +11,17 @@ import (
 )
 
 var (
-	version     = "dev"
-	emailFlag   string
-	tokenFlag   string
-	serverFlag  string
-	projectFlag string
-	jsonFlag    bool
-	jqFlag      string
-	limitFlag   int
-	verboseFlag bool
-	quietFlag   bool
+	version            = "dev"
+	emailFlag          string
+	tokenFlag          string
+	serverFlag         string
+	projectFlag        string
+	jsonFlag           bool
+	jqFlag             string
+	limitFlag          int
+	verboseFlag        bool
+	quietFlag          bool
+	descriptionFormat  string
 )
 
 var rootCmd = &cobra.Command{
@@ -85,4 +86,5 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&limitFlag, "limit", 50, "Max results")
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Print request/response details to stderr")
 	rootCmd.PersistentFlags().BoolVarP(&quietFlag, "quiet", "q", false, "Suppress non-error output")
+	rootCmd.PersistentFlags().StringVar(&descriptionFormat, "description-format", "", "Convert description field: 'markdown' converts ADF to markdown")
 }
