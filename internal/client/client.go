@@ -153,6 +153,49 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 	return c.do(ctx, "GET", path, nil, params)
 }
 
+// GetBinary performs a GET and returns the raw response bytes (for binary content
+// like attachment downloads). Uses a separate http.Client with a 5-minute timeout to
+// handle large files (videos, archives) that would exceed the 30s default. Skips the
+// JSON parsing wrapper that the standard `do()` path applies.
+func (c *Client) GetBinary(ctx context.Context, path string, params url.Values) ([]byte, error) {
+	u := c.server + "/" + strings.TrimLeft(path, "/")
+	if len(params) > 0 {
+		u += "?" + params.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", c.authHeader())
+	// Intentionally no Accept header — let the server pick the content-type for binary.
+
+	if c.verbose {
+		fmt.Fprintf(os.Stderr, "→ GET %s (binary)\n", u)
+	}
+
+	binaryClient := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := binaryClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read binary response: %w", err)
+	}
+
+	if c.verbose {
+		fmt.Fprintf(os.Stderr, "← %d (%d bytes)\n", resp.StatusCode, len(body))
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, parseError(resp.StatusCode, body)
+	}
+	return body, nil
+}
+
 // Post performs a POST request with a JSON body.
 func (c *Client) Post(ctx context.Context, path string, body any) (json.RawMessage, error) {
 	return c.do(ctx, "POST", path, body, nil)
