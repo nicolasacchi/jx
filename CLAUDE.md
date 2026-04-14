@@ -225,9 +225,14 @@ jx properties list MLF-5146
 jx properties set MLF-5146 --key "deploy.status" --value '{"env":"prod"}'
 jx worklogs add MLF-5146 --time 2h --comment "Code review"
 jx watchers list MLF-5146
+jx attachments list MLF-5146
 jx attachments add MLF-5146 --file screenshot.png
+jx attachments get 32175 --output ./downloads/                    # download single binary by ID
+jx attachments download-all MLF-5146 --output ./attachments/      # download every attachment into per-issue subdir
 jx links create MLF-5146 MLF-5145 --type "is blocked by"
 ```
+
+`attachments get` / `download-all` skip files that already exist on disk (idempotent re-runs) and use a separate 5-minute HTTP timeout for binary content (the standard 30 s API timeout would cut off large videos/archives).
 
 ### service-desk
 
@@ -255,6 +260,24 @@ jx labels list
 jx open MLF-5146
 jx config add production --email user@co.com --token TOKEN --server https://...
 ```
+
+### export (migration bulk extract)
+
+```bash
+jx export --project MLF --output ./mlf-export/                                  # all issues
+jx export --project MLF --updated -180d --output ./mlf-export/                  # recent only
+jx export --project SDD --updated -90d --output ./sdd-export/ --include comments
+jx export --project MLF --output ./mlf-export/ --download-attachments           # also fetch binaries
+```
+
+Produces:
+
+- `<output>/issues.jsonl` — flattened issues, one per line, descriptions converted ADF→markdown
+- `<output>/comments/<KEY>.json` — comments per open issue (skipped for Done/Resolved/Rejected/WON'T DO)
+- `<output>/attachments.json` — attachment metadata for all issues (filename, size, content URL, author, created)
+- `<output>/attachments/<KEY>/<filename>` — raw binaries (only with `--download-attachments`)
+
+`--include` defaults to `comments,attachments`. Use `--include comments` to skip attachments metadata, `--include attachments` to skip comments. `--download-attachments` is idempotent — existing files are skipped on re-run, and downloads use the 5-minute binary client timeout.
 
 ## Markdown → ADF Converter
 

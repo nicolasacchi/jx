@@ -15,10 +15,11 @@ import (
 )
 
 var (
-	exportProject string
-	exportOutput  string
-	exportUpdated string
-	exportInclude string // "comments,attachments" or subset
+	exportProject             string
+	exportOutput              string
+	exportUpdated             string
+	exportInclude             string // "comments,attachments" or subset
+	exportDownloadAttachments bool
 )
 
 func init() {
@@ -30,6 +31,7 @@ func init() {
 	exportCmd.MarkFlagRequired("output")
 	exportCmd.Flags().StringVar(&exportUpdated, "updated", "", "Only issues updated since (e.g., -180d, -7d)")
 	exportCmd.Flags().StringVar(&exportInclude, "include", "comments,attachments", "Data to include: comments,attachments (comma-separated)")
+	exportCmd.Flags().BoolVar(&exportDownloadAttachments, "download-attachments", false, "Also download attachment binaries to <output>/attachments/<issue-key>/<filename>")
 }
 
 var exportCmd = &cobra.Command{
@@ -245,6 +247,58 @@ Examples:
 			}
 			fmt.Fprintf(os.Stderr, "export: %d attachments across %d issues\n",
 				len(allAttachments), countIssuesWithAttachments(allIssues))
+
+			// Phase 3b (optional): download binary content of every attachment.
+			if exportDownloadAttachments {
+				attachRoot := filepath.Join(exportOutput, "attachments")
+				if err := os.MkdirAll(attachRoot, 0o755); err != nil {
+					return fmt.Errorf("create attachments dir: %w", err)
+				}
+
+				totalAtt := len(allAttachments)
+				downloaded := 0
+				skipped := 0
+				failed := 0
+				idx := 0
+				for _, ei := range allIssues {
+					if len(ei.attachments) == 0 {
+						continue
+					}
+					issueDir := filepath.Join(attachRoot, ei.key)
+					if err := os.MkdirAll(issueDir, 0o755); err != nil {
+						return fmt.Errorf("create issue attachment dir %s: %w", ei.key, err)
+					}
+					for _, att := range ei.attachments {
+						idx++
+						outPath := filepath.Join(issueDir, att.filename)
+
+						// Idempotent skip.
+						if info, err := os.Stat(outPath); err == nil && info.Size() > 0 {
+							skipped++
+							continue
+						}
+
+						body, derr := c.GetBinary(context.Background(), "rest/api/3/attachment/content/"+att.id, nil)
+						if derr != nil {
+							failed++
+							fmt.Fprintf(os.Stderr, "export: [%d/%d] %s/%s FAILED: %v\n", idx, totalAtt, ei.key, att.filename, derr)
+							continue
+						}
+						if err := os.WriteFile(outPath, body, 0o644); err != nil {
+							failed++
+							fmt.Fprintf(os.Stderr, "export: [%d/%d] %s/%s FAILED to write: %v\n", idx, totalAtt, ei.key, att.filename, err)
+							continue
+						}
+						downloaded++
+						fmt.Fprintf(os.Stderr, "export: [%d/%d] %s/%s (%d KB)\n", idx, totalAtt, ei.key, att.filename, len(body)/1024)
+					}
+				}
+				fmt.Fprintf(os.Stderr, "export: attachments → %d downloaded, %d skipped, %d failed (total %d) in %s\n",
+					downloaded, skipped, failed, totalAtt, attachRoot)
+				if failed > 0 {
+					return fmt.Errorf("%d of %d attachment downloads failed", failed, totalAtt)
+				}
+			}
 		}
 
 		fmt.Fprintf(os.Stderr, "export: done. Output in %s\n", exportOutput)
